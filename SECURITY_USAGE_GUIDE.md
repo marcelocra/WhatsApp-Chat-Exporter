@@ -734,4 +734,4 @@ By following this guide, you can process your WhatsApp data with confidence that
 
 **Last Updated**: 2025-12-28  
 **Guide Version**: 1.0  
-**Compatible with WhatsApp Chat Exporter**: 0.12.1+
+**Compatible with WhatsApp Chat Exporter**: 0.12.1

@@ -74,7 +74,7 @@ copy_input_files() {
     read -p "Press Enter when files are ready..."
     
     # Verify files exist
-    if [ ! "$(ls -A ${INPUT_DIR})" ]; then
+    if [ ! "$(ls -A "${INPUT_DIR}")" ]; then
         log_error "Input directory is empty. Please add your WhatsApp data files."
         exit 1
     fi
@@ -96,10 +96,9 @@ run_export() {
     log_info "Starting export process (this may take a while)..."
     log_info "Network access is DISABLED for security"
     
-    # Verify network is disabled
-    docker run --rm --network none alpine sh -c "ping -c 1 google.com" 2>&1 | grep -q "bad address" || {
-        log_warn "Network isolation may not be working properly"
-    }
+    # Note: Network is disabled with --network none
+    # We rely on Docker's network isolation rather than testing it
+    # as error messages vary across Docker versions
     
     # Run the export
     if [ "$platform" == "android" ]; then

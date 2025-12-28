@@ -43,7 +43,9 @@ services:
     # Security options
     security_opt:
       - no-new-privileges:true
-      - seccomp:unconfined  # May need adjustment based on requirements
+      # Note: Using default seccomp profile for syscall filtering
+      # If you encounter issues, you may need to create a custom profile
+      # Only use seccomp:unconfined if absolutely necessary for your use case
     
     # Drop all capabilities
     cap_drop:
