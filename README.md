@@ -6,6 +6,14 @@
 [![Since 2021](https://img.shields.io/github/created-at/knugihk/WhatsApp-Chat-Exporter?label=Since&color=purple)](https://wts.knugi.dev)
 
 A customizable Android and iPhone Whatsapp database parser that will give you the history of your Whatsapp conversations in HTML and JSON. Inspired by [Telegram Chat Export Tool](https://telegram.org/blog/export-and-more).  
+
+> [!IMPORTANT]
+> **Security & Privacy**: This tool processes highly sensitive personal data. For maximum security when exporting your WhatsApp history:
+> - 📖 Read the **[Security Analysis](SECURITY.md)** - comprehensive security review of the codebase
+> - 🔒 Follow the **[Security Usage Guide](SECURITY_USAGE_GUIDE.md)** - step-by-step instructions for secure usage
+> - 🐳 Use **[Docker Setup](DOCKER.md)** - recommended isolated environment with network disabled
+> - 🚀 Quick start: `./secure_export.sh android` - automated secure export script
+
 > [!TIP]
 > If you plan to uninstall WhatsApp or delete your WhatsApp account, please make a backup of your WhatsApp database. You may want to use this exporter again on the same database in the future as the exporter develops.
 
