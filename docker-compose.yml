@@ -1,0 +1,89 @@
+# Docker Compose configuration for WhatsApp Chat Exporter
+# This provides a secure, isolated environment for processing WhatsApp data
+
+version: '3.8'
+
+services:
+  whatsapp-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Container name
+    container_name: whatsapp-exporter-secure
+    
+    # Run as non-root user (will use UID:GID from environment)
+    user: "${UID:-1000}:${GID:-1000}"
+    
+    # Disable networking - no internet access
+    network_mode: none
+    
+    # Read-only root filesystem for security
+    read_only: true
+    
+    # Mount volumes
+    volumes:
+      # Input directory (read-only)
+      - type: bind
+        source: ./input
+        target: /data/input
+        read_only: true
+      
+      # Output directory (read-write)
+      - type: bind
+        source: ./output
+        target: /data/output
+      
+      # Temporary directory (in-memory)
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 100M
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:unconfined  # May need adjustment based on requirements
+    
+    # Drop all capabilities
+    cap_drop:
+      - ALL
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    
+    # Default command (can be overridden)
+    command: >
+      wtsexporter
+      -a
+      -d /data/input/msgstore.db
+      -w /data/input/wa.db
+      -m /data/input/WhatsApp
+      -o /data/output/result
+
+  # Alternative service for iOS exports
+  whatsapp-exporter-ios:
+    extends: whatsapp-exporter
+    container_name: whatsapp-exporter-ios-secure
+    command: >
+      wtsexporter
+      -i
+      -b /data/input/backup
+      -o /data/output/result
+
+# Networks (none used, but defined for clarity)
+networks:
+  default:
+    driver: none
