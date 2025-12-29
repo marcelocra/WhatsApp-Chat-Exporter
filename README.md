@@ -7,12 +7,33 @@
 
 A customizable Android and iPhone Whatsapp database parser that will give you the history of your Whatsapp conversations in HTML and JSON. Inspired by [Telegram Chat Export Tool](https://telegram.org/blog/export-and-more).  
 
+## 🔒 Security & Privacy
+
 > [!IMPORTANT]
-> **Security & Privacy**: This tool processes highly sensitive personal data. For maximum security when exporting your WhatsApp history:
-> - 📖 Read the **[Security Analysis](SECURITY.md)** - comprehensive security review of the codebase
-> - 🔒 Follow the **[Security Usage Guide](SECURITY_USAGE_GUIDE.md)** - step-by-step instructions for secure usage
-> - 🐳 Use **[Docker Setup](DOCKER.md)** - recommended isolated environment with network disabled
-> - 🚀 Quick start: `./secure_export.sh android` - automated secure export script
+> **This tool has undergone a comprehensive security review** (December 2025). **Verdict: ✅ SAFE for personal use** when following security guidelines.
+>
+> **Quick Secure Export**:
+> ```bash
+> # Clone repo, prepare your data, then run:
+> ./secure_export.sh all_android /path/to/whatsapp_data
+> # or for iOS:
+> ./secure_export.sh all_ios /path/to/ios_backup
+> ```
+> This automatically builds Docker image, disables network, exports data, and encrypts output.
+>
+> **Documentation**:
+> - 🚀 **Start here**: [User-Friendly Guide](SECURITY_REVIEW_FOR_USERS.md) - Quick security overview
+> - 📖 **Detailed review**: [SECURITY.md](SECURITY.md) - Complete security analysis
+> - 🔒 **Usage guide**: [SECURITY_USAGE_GUIDE.md](SECURITY_USAGE_GUIDE.md) - Step-by-step secure setup
+> - 🐳 **Docker**: [DOCKER.md](DOCKER.md) - Container isolation (recommended)
+> - 🗺️ **Future**: [ROADMAP.md](ROADMAP.md) - Planned improvements
+>
+> **Key Security Features**:
+> - ✅ No data exfiltration - all processing is local
+> - ✅ Proper cryptography (AES-GCM, HMAC-SHA256)
+> - ✅ HTML sanitization prevents XSS
+> - ✅ Docker setup provides complete isolation
+> - ⚠️ **iOS users**: Backup contains all device data, not just WhatsApp - use Docker!
 
 > [!TIP]
 > If you plan to uninstall WhatsApp or delete your WhatsApp account, please make a backup of your WhatsApp database. You may want to use this exporter again on the same database in the future as the exporter develops.

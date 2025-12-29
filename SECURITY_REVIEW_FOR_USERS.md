@@ -64,24 +64,31 @@ I've created a complete Docker setup that provides **maximum security** through 
 - **.dockerignore** - Prevents sensitive files in images
 - **secure_export.sh** - Automated workflow script
 
-### How to Use (Easiest Way):
+### How to Use:
+
+The `secure_export.sh` script now supports individual commands or complete workflows:
 
 ```bash
-# 1. Make the script executable
-chmod +x secure_export.sh
-
-# 2. Run the automated secure export
-./secure_export.sh android   # For Android
+# Complete workflow (all steps automated):
+./secure_export.sh all_android /path/to/whatsapp_data
 # or
-./secure_export.sh ios        # For iOS
+./secure_export.sh all_ios ~/Library/Application\ Support/MobileSync/Backup/[device-id]
 
-# That's it! The script handles everything:
-# ✓ Creates isolated directory
-# ✓ Builds Docker image
+# Or run steps individually:
+./secure_export.sh check_deps              # Check dependencies
+./secure_export.sh build                   # Build Docker image
+./secure_export.sh export_android /path    # Export Android data
+./secure_export.sh encrypt /output/path    # Encrypt results
+
+# The script:
+# ✓ Builds Docker image from local source
+# ✓ Mounts your data directory directly (no copying)
 # ✓ Runs with network disabled
 # ✓ Encrypts your export with GPG
-# ✓ Securely deletes temporary files
+# ✓ Prints secure deletion commands (you run manually)
 ```
+
+See `./secure_export.sh help` for all commands and options.
 
 ## 🛡️ Security Layers Implemented
 
@@ -171,6 +178,8 @@ Your WhatsApp data contains:
 - 📸 Photos and videos
 - 👥 Contact information
 
+**For iOS users**: The iOS backup directory contains **all device data**, not just WhatsApp. This includes other apps, photos, system files, and personal information. The Docker isolation is especially important for iOS exports.
+
 **This is highly sensitive personal information.** Even though the code is safe, you should still:
 1. Use isolation (Docker/VM)
 2. Disable network access
@@ -248,9 +257,15 @@ If you have questions about the security documentation or setup, please refer to
 
 **Review Completed**: December 28, 2025  
 **Version Reviewed**: 0.12.1  
-**Reviewer**: GitHub Copilot Security Analysis  
+**Reviewed By**: Comprehensive security analysis performed as part of this PR (see commit history)  
+**Analysis Scope**: Full codebase review (3,500+ lines), dependency analysis, threat modeling  
 **Verdict**: ✅ **SAFE FOR PERSONAL USE**  
 **Recommendation**: Follow [SECURITY_USAGE_GUIDE.md](SECURITY_USAGE_GUIDE.md)
+
+For complete review details, see:
+- Technical analysis: [SECURITY.md](SECURITY.md)
+- Usage guide: [SECURITY_USAGE_GUIDE.md](SECURITY_USAGE_GUIDE.md)  
+- Future improvements: [ROADMAP.md](ROADMAP.md)
 
 ---
 
