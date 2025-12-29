@@ -22,6 +22,8 @@ This guide provides step-by-step instructions for using WhatsApp Chat Exporter i
 - Location data
 - Call history
 
+**Important for iOS Users**: When exporting from iOS, the exporter processes the entire iOS backup directory, which contains **much more than just WhatsApp data**. This includes other app data, photos, system files, and personal information from your device. For maximum privacy, use the Docker setup which provides strict isolation.
+
 **Important**: Even though the code has been reviewed and found to be safe (see SECURITY.md), implementing additional layers of security is a best practice when handling sensitive personal data.
 
 ## Threat Model
@@ -33,6 +35,7 @@ This guide provides step-by-step instructions for using WhatsApp Chat Exporter i
 3. **Persistence of Sensitive Data**: Temporary files remaining on disk after use
 4. **Unauthorized Access**: Other users on the same system accessing your data
 5. **Supply Chain Attacks**: Compromised dependencies or malicious updates
+6. **iOS Full Backup Exposure**: For iOS users, the backup contains all device data, not just WhatsApp
 
 ### Defense-in-Depth Strategy:
 
@@ -47,44 +50,90 @@ This guide uses multiple layers of security:
 
 If you want the highest level of security without reading the entire guide, follow these steps:
 
-### Option 1: Docker with No Network (Recommended for Most Users)
+### Option 1: Using Provided Automation Script (Easiest & Recommended)
 
 ```bash
-# 1. Create a secure working directory
-mkdir -p ~/whatsapp_export_secure
-cd ~/whatsapp_export_secure
+# 1. Clone this repository at the reviewed version
+git clone https://github.com/KnugiHK/WhatsApp-Chat-Exporter.git
+cd WhatsApp-Chat-Exporter
+git checkout v0.12.1  # Use the reviewed version
 
-# 2. Copy your WhatsApp data here
-# (msgstore.db, wa.db, WhatsApp media folder, key file if encrypted)
+# 2. Prepare your WhatsApp data in a directory
+# For Android: place msgstore.db, wa.db, WhatsApp/ folder
+# For iOS: use your iOS backup directory path
 
-# 3. Build Docker image
+# 3. Run the automated secure export
+./secure_export.sh all_android /path/to/your/whatsapp_data
+# or
+./secure_export.sh all_ios ~/Library/Application\ Support/MobileSync/Backup/[device-id]
+
+# This automatically:
+# - Builds Docker image from local source
+# - Exports with network disabled
+# - Encrypts output with GPG
+# - Provides secure deletion commands
+```
+
+### Option 2: Manual Docker with Local Build (Most Secure)
+
+For complete control and verification:
+
+```bash
+# 1. Clone and verify the repository
+git clone https://github.com/KnugiHK/WhatsApp-Chat-Exporter.git
+cd WhatsApp-Chat-Exporter
+git checkout v0.12.1  # Use the reviewed version
+git verify-commit v0.12.1  # If signed
+
+# 2. Review the code yourself (optional but recommended)
+# Look at Whatsapp_Chat_Exporter/*.py files
+
+# 3. Build Docker image from local source (NOT from PyPI)
+docker build -t whatsapp-exporter:local .
+
+# 4. Run with NO NETWORK ACCESS
+docker run --rm \
+  --network none \
+  --read-only \
+  --tmpfs /tmp \
+  -v "/path/to/your/data:/data/input:ro" \
+  -v "/path/to/output:/data/output" \
+  -u $(id -u):$(id -g) \
+  whatsapp-exporter:local \
+  wtsexporter -a -d /data/input/msgstore.db -o /data/output
+
+# 5. Encrypt the output
+cd /path/to/output
+tar -czf - result | gpg --symmetric --cipher-algo AES256 -o whatsapp_export.tar.gz.gpg
+
+# 6. Securely delete unencrypted data
+find result -type f -exec shred -uvz -n 3 {} \;
+rm -rf result
+```
+
+### Option 3: Using PyPI Package (Convenient, Lower Security)
+
+**Note**: This downloads code from PyPI during build, which introduces supply chain risk. Only use if you trust the PyPI distribution channel.
+
+```bash
+# 1. Create Dockerfile
 cat > Dockerfile << 'EOF'
 FROM python:3.11-slim
-RUN pip install --no-cache-dir whatsapp-chat-exporter[all]
+RUN pip install --no-cache-dir whatsapp-chat-exporter==0.12.1
 WORKDIR /data
 EOF
 
 docker build -t whatsapp-exporter .
 
-# 4. Run with NO NETWORK ACCESS
+# 2. Run with NO NETWORK ACCESS
 docker run --rm \
   --network none \
   -v "$(pwd):/data" \
   -it whatsapp-exporter \
   wtsexporter -a
 
-# 5. Export is now in ./result/ directory
-# Review and encrypt the output:
-tar -czf whatsapp_export.tar.gz result/
-gpg --symmetric --cipher-algo AES256 whatsapp_export.tar.gz
-
-# 6. Securely delete unencrypted data
-rm -rf result/ whatsapp_export.tar.gz
-# Also delete input files if no longer needed
-shred -uvz msgstore.db wa.db key 2>/dev/null || rm -f msgstore.db wa.db key
+# 3. Encrypt and clean up (same as above)
 ```
-
-### Option 2: Air-Gapped System (Maximum Security)
 
 For maximum security, use a completely offline computer:
 
@@ -98,7 +147,9 @@ For maximum security, use a completely offline computer:
 
 ### Configuration Level 1: Basic (Minimal Effort)
 
-**Security Level**: ⭐⭐ (Better than nothing)
+**Security Level**: ⭐⭐ out of ⭐⭐⭐⭐⭐ (Better than nothing)
+
+**Warning**: This configuration could potentially execute undesirable code if dependencies are compromised. Using Docker (Level 2) provides better isolation.
 
 ```bash
 # 1. Create isolated directory
@@ -128,13 +179,13 @@ chmod 700 secure_output
 ```
 
 **Pros**: Easy to set up  
-**Cons**: Network disable requires privileges; data not strongly isolated
+**Cons**: Network disable requires privileges; data not strongly isolated; if dependencies are compromised, malicious code runs directly on your system
 
 ### Configuration Level 2: Container Isolation (Recommended)
 
-**Security Level**: ⭐⭐⭐⭐ (Good balance of security and usability)
+**Security Level**: ⭐⭐⭐⭐ out of ⭐⭐⭐⭐⭐ (Good balance of security and usability)
 
-See "Quick Start" above for Docker commands.
+See "Quick Start - Option 1 or 2" above for Docker commands using the automation script or manual commands.
 
 **Additional Docker Security Options**:
 

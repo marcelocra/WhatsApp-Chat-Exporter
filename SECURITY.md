@@ -32,7 +32,7 @@ The codebase demonstrates good security practices in several areas, but users sh
 
 ### 2. File System Access and Path Traversal
 
-**Risk Level: LOW to MEDIUM**
+**Risk Level: LOW to MEDIUM (LOW when using Docker)**
 
 #### Findings:
 
@@ -51,14 +51,22 @@ The codebase demonstrates good security practices in several areas, but users sh
 - Could potentially read/write outside intended directories if user provides malicious paths
 - **Mitigation**: This is by design - users control their own file systems and the tool needs flexibility
 
+**Container Mitigation:**
+- ✅ **Using Docker with read-only input mounts** (`-v input:/data/input:ro`) **completely mitigates** path traversal risks
+- The container filesystem is isolated and controlled
+- Input directory is mounted read-only, preventing any writes
+- Output directory is explicitly controlled by mount point
+- See DOCKER.md and secure_export.sh for proper container usage
+
 #### Recommendations:
+- **Recommended**: Use Docker with read-only input mounts (see secure_export.sh)
 - Users should only provide paths within their intended working directory
 - Do not run the tool with elevated privileges (root/administrator)
 - Review output directory permissions after export
 
 ### 3. SQL Injection Vulnerabilities
 
-**Risk Level: MEDIUM**
+**Risk Level: MEDIUM (LOW when using Docker with read-only mounts)**
 
 #### Findings:
 
@@ -78,6 +86,11 @@ date_filter = f'AND messages.timestamp {filter_date}' if filter_date is not None
 **Assessment:**
 While there are dynamic SQL queries, the input validation prevents most SQL injection attacks. The databases being read are user-owned and local, so SQLi would only affect the user's own data.
 
+**Container Mitigation:**
+- ✅ **Using Docker with read-only input mounts** prevents SQL injection from modifying source databases
+- Even if SQLi were possible, read-only mounts prevent database tampering
+- See secure_export.sh which mounts input as read-only (`-v input:/data/input:ro`)
+
 #### Current Mitigations:
 ```python
 # Phone number validation in __main__.py line 296-301
@@ -88,8 +101,9 @@ if chat_filter is not None:
 ```
 
 #### Recommendations:
+- **Recommended**: Use Docker with read-only input mounts
 - Continue to validate all user inputs that go into SQL queries
-- Consider using parameterized queries for enhanced security in future versions
+- Consider using parameterized queries for enhanced security in future versions (see ROADMAP.md)
 
 ### 4. Cross-Site Scripting (XSS) in HTML Output
 
@@ -102,6 +116,12 @@ if chat_filter is not None:
 - ✅ Uses `bleach.clean()` for HTML sanitization (utility.py line 112-121)
 - ✅ Uses `markupsafe.escape()` for escaping user content
 - ✅ Only allows `<br>` tags through sanitization
+
+**Note on bleach dependency:**
+- ⚠️ `bleach` is deprecated since 2023 but still receives occasional updates
+- Current usage is minimal (only allowing `<br>` tags)
+- Alternative: Consider migrating to `nh3` (maintained by Mozilla) or `markupsafe` alone
+- See ROADMAP.md for planned dependency updates
 
 **Template Rendering:**
 ```python
@@ -158,19 +178,29 @@ def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
 **Risk Level: LOW to MEDIUM**
 
 #### Key Dependencies:
+**Widely Used and Well-Maintained:**
 - `jinja2` - Template engine (widely used, well-maintained)
-- `bleach` - HTML sanitization (security-focused library)
 - `pycryptodome` - Cryptographic operations (maintained fork of PyCrypto)
-- `javaobj-py3` - Java object deserialization (for Crypt15)
+
+**Less Widely Used (but functional for this project):**
+- `bleach` - HTML sanitization (deprecated since 2023, but still receives updates)
+  - Used minimally (only for allowing `<br>` tags)
+  - Consider migrating to `nh3` or `markupsafe` alone (see ROADMAP.md)
+- `javaobj-py3` - Java object deserialization (for Crypt15 backups)
+  - Smaller user base, niche use case
+  - Only used for WhatsApp's Crypt15 encrypted backups
+  - Monitor for security updates
 
 **Potential Concerns:**
 - Dependencies should be kept up-to-date to receive security patches
 - `javaobj-py3` deserializes Java objects which could theoretically have deserialization vulnerabilities
+- `bleach` is deprecated and should be replaced in future versions
 
 #### Recommendations:
 - Regularly update dependencies: `pip install --upgrade whatsapp-chat-exporter`
 - Use virtual environments to isolate dependencies
 - Run dependency vulnerability scanners (see SECURITY_USAGE_GUIDE.md)
+- See ROADMAP.md for planned dependency updates
 
 ### 7. Sensitive Data Handling
 
@@ -243,10 +273,27 @@ The tool processes highly sensitive personal data:
 ## Known Limitations
 
 1. **No Built-in Encryption**: Exported data is stored in plaintext
+   - **User Action**: Use GPG/VeraCrypt to encrypt exports (see SECURITY_USAGE_GUIDE.md)
+   - **Alternative**: Store exports on encrypted filesystems (LUKS, FileVault, BitLocker)
+   - **Future**: Consider adding built-in encryption option (see ROADMAP.md)
+
 2. **No Secure Deletion**: Temporary files may remain on disk
+   - **User Action**: Use `shred` or secure deletion tools (commands provided by secure_export.sh)
+   - **SSD Note**: Secure deletion is less effective on SSDs; use full-disk encryption instead
+   - **Future**: Consider adding secure deletion option (see ROADMAP.md)
+
 3. **No Access Logging**: No audit trail of what was exported
+   - **Project Scope**: This is intentionally out of scope for a local tool
+   - **User Action**: Use OS-level auditing (auditd, macOS logging) if needed
+   - **Alternative**: Run in containerized environment and review container logs
+
 4. **No Rate Limiting**: Could be used to rapidly process many databases
+   - **Project Scope**: Not applicable for a local, single-user tool
+   - **Context**: This limitation is only relevant if the tool were a service
+   
 5. **No Integrity Verification**: No checksums for exported data
+   - **User Action**: Generate checksums manually after export (`sha256sum`, `shasum`)
+   - **Future**: Consider adding automatic checksum generation (see ROADMAP.md)
 
 ## Overall Security Recommendations
 
