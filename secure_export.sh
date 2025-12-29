@@ -3,7 +3,17 @@
 # Secure WhatsApp Chat Export Script
 # This script automates the secure export process using Docker
 #
-# Usage: ./secure_export.sh [android|ios]
+# Usage: ./secure_export.sh [command] [options]
+#
+# Commands:
+#   check_deps              Check if required dependencies are installed
+#   build                   Build the Docker image
+#   export_android <dir>    Export Android WhatsApp data from directory
+#   export_ios <dir>        Export iOS WhatsApp data from directory
+#   encrypt <dir>           Encrypt exported data in directory
+#   all_android <dir>       Run all steps for Android (build + export + encrypt)
+#   all_ios <dir>           Run all steps for iOS (build + export + encrypt)
+#   help                    Show this help message
 #
 
 set -euo pipefail
@@ -16,9 +26,15 @@ NC='\033[0m' # No Color
 
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK_DIR="${SCRIPT_DIR}/whatsapp_export_$(date +%Y%m%d_%H%M%S)"
-INPUT_DIR="${WORK_DIR}/input"
-OUTPUT_DIR="${WORK_DIR}/output"
+
+# Common Docker flags for security hardening
+DOCKER_SECURITY_FLAGS=(
+    --network none
+    --read-only
+    --tmpfs /tmp
+    --security-opt=no-new-privileges:true
+    --cap-drop=ALL
+)
 
 # Functions
 log_info() {
@@ -33,212 +49,304 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-check_dependencies() {
+cmd_check_deps() {
     log_info "Checking dependencies..."
+    
+    local all_ok=true
     
     if ! command -v docker &> /dev/null; then
         log_error "Docker is not installed. Please install Docker first."
-        exit 1
+        all_ok=false
+    else
+        log_info "✓ Docker is installed"
     fi
     
     if ! command -v gpg &> /dev/null; then
         log_warn "GPG is not installed. Encryption will be skipped."
-    fi
-}
-
-setup_directories() {
-    log_info "Creating secure working directory: ${WORK_DIR}"
-    mkdir -p "${INPUT_DIR}" "${OUTPUT_DIR}"
-    chmod 700 "${WORK_DIR}"
-}
-
-copy_input_files() {
-    local platform=$1
-    
-    log_info "Please copy your WhatsApp data files to: ${INPUT_DIR}"
-    
-    if [ "$platform" == "android" ]; then
-        echo ""
-        echo "Required files:"
-        echo "  - msgstore.db (or msgstore.db.crypt14/15 + key)"
-        echo "  - wa.db (optional, for contact names)"
-        echo "  - WhatsApp/ directory (for media files)"
-        echo ""
     else
-        echo ""
-        echo "Required files:"
-        echo "  - iOS backup directory (from ~/Library/Application Support/MobileSync/Backup/[device-id])"
-        echo ""
+        log_info "✓ GPG is installed"
     fi
     
-    read -p "Press Enter when files are ready..."
-    
-    # Verify files exist
-    if [ ! "$(ls -A "${INPUT_DIR}")" ]; then
-        log_error "Input directory is empty. Please add your WhatsApp data files."
-        exit 1
+    if [ "$all_ok" = true ]; then
+        log_info "All required dependencies are installed!"
+        return 0
+    else
+        return 1
     fi
 }
 
-build_docker_image() {
+cmd_build() {
     log_info "Building Docker image..."
     
     cd "${SCRIPT_DIR}"
     docker build -t whatsapp-exporter:secure . || {
         log_error "Failed to build Docker image"
-        exit 1
+        return 1
     }
+    
+    log_info "✓ Docker image built successfully: whatsapp-exporter:secure"
 }
 
-run_export() {
-    local platform=$1
+cmd_export_android() {
+    local input_dir="${1:?Input directory required}"
     
-    log_info "Starting export process (this may take a while)..."
+    # Resolve to absolute path
+    input_dir="$(cd "$input_dir" && pwd)"
+    
+    # Create output directory
+    local output_dir="${input_dir}_output_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$output_dir"
+    chmod 700 "$output_dir"
+    
+    log_info "Starting Android export process (this may take a while)..."
+    log_info "Input directory: ${input_dir}"
+    log_info "Output directory: ${output_dir}"
     log_info "Network access is DISABLED for security"
     
-    # Note: Network is disabled with --network none
-    # We rely on Docker's network isolation rather than testing it
-    # as error messages vary across Docker versions
+    # Run the export with common security flags
+    docker run --rm \
+        "${DOCKER_SECURITY_FLAGS[@]}" \
+        -v "${input_dir}:/data/input:ro" \
+        -v "${output_dir}:/data/output" \
+        -u "$(id -u):$(id -g)" \
+        whatsapp-exporter:secure \
+        wtsexporter -a \
+            -d /data/input/msgstore.db \
+            -w /data/input/wa.db \
+            -m /data/input/WhatsApp \
+            -o /data/output/result
     
-    # Run the export
-    if [ "$platform" == "android" ]; then
-        docker run --rm \
-            --network none \
-            --read-only \
-            --tmpfs /tmp \
-            --security-opt=no-new-privileges:true \
-            --cap-drop=ALL \
-            -v "${INPUT_DIR}:/data/input:ro" \
-            -v "${OUTPUT_DIR}:/data/output" \
-            -u "$(id -u):$(id -g)" \
-            whatsapp-exporter:secure \
-            wtsexporter -a \
-                -d /data/input/msgstore.db \
-                -w /data/input/wa.db \
-                -m /data/input/WhatsApp \
-                -o /data/output/result
-    else
-        docker run --rm \
-            --network none \
-            --read-only \
-            --tmpfs /tmp \
-            --security-opt=no-new-privileges:true \
-            --cap-drop=ALL \
-            -v "${INPUT_DIR}:/data/input:ro" \
-            -v "${OUTPUT_DIR}:/data/output" \
-            -u "$(id -u):$(id -g)" \
-            whatsapp-exporter:secure \
-            wtsexporter -i \
-                -b /data/input/backup \
-                -o /data/output/result
-    fi
-    
-    log_info "Export completed successfully!"
+    log_info "✓ Export completed successfully!"
+    log_info "Results in: ${output_dir}/result"
+    echo ""
+    echo "To encrypt the output, run:"
+    echo "  $0 encrypt ${output_dir}"
 }
 
-encrypt_output() {
+cmd_export_ios() {
+    local input_dir="${1:?Input directory required}"
+    
+    # Resolve to absolute path
+    input_dir="$(cd "$input_dir" && pwd)"
+    
+    # Create output directory
+    local output_dir="${input_dir}_output_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$output_dir"
+    chmod 700 "$output_dir"
+    
+    log_info "Starting iOS export process (this may take a while)..."
+    log_info "Input directory: ${input_dir}"
+    log_info "Output directory: ${output_dir}"
+    log_info "Network access is DISABLED for security"
+    
+    # Run the export with common security flags
+    docker run --rm \
+        "${DOCKER_SECURITY_FLAGS[@]}" \
+        -v "${input_dir}:/data/input:ro" \
+        -v "${output_dir}:/data/output" \
+        -u "$(id -u):$(id -g)" \
+        whatsapp-exporter:secure \
+        wtsexporter -i \
+            -b /data/input \
+            -o /data/output/result
+    
+    log_info "✓ Export completed successfully!"
+    log_info "Results in: ${output_dir}/result"
+    echo ""
+    echo "To encrypt the output, run:"
+    echo "  $0 encrypt ${output_dir}"
+}
+
+cmd_encrypt() {
+    local work_dir="${1:?Work directory required}"
+    
     if ! command -v gpg &> /dev/null; then
-        log_warn "GPG not available, skipping encryption"
-        return
+        log_error "GPG is not installed. Please install GPG to encrypt the output."
+        return 1
     fi
     
-    log_info "Encrypting exported data..."
+    # Resolve to absolute path
+    work_dir="$(cd "$work_dir" && pwd)"
     
-    cd "${WORK_DIR}"
-    tar -czf - output/result | gpg --symmetric --cipher-algo AES256 -o whatsapp_export.tar.gz.gpg
+    if [ ! -d "${work_dir}/result" ]; then
+        log_error "No result directory found in ${work_dir}"
+        return 1
+    fi
+    
+    log_info "Encrypting exported data in: ${work_dir}"
+    
+    cd "${work_dir}"
+    tar -czf - result | gpg --symmetric --cipher-algo AES256 -o whatsapp_export.tar.gz.gpg
     
     if [ -f whatsapp_export.tar.gz.gpg ]; then
-        log_info "Encrypted export created: ${WORK_DIR}/whatsapp_export.tar.gz.gpg"
-        
-        read -p "Delete unencrypted output? [y/N]: " confirm
-        if [[ $confirm == [yY] ]]; then
-            log_info "Securely deleting unencrypted data..."
-            if command -v shred &> /dev/null; then
-                find output/ -type f -exec shred -uvz -n 3 {} \;
-            fi
-            rm -rf output/
-            log_info "Unencrypted data deleted"
-        fi
+        log_info "✓ Encrypted export created: ${work_dir}/whatsapp_export.tar.gz.gpg"
+        log_info "Size: $(du -h whatsapp_export.tar.gz.gpg | cut -f1)"
+        echo ""
+        echo "IMPORTANT: To securely delete unencrypted data, run:"
+        echo "  # Delete output (if shred is available):"
+        echo "  find ${work_dir}/result -type f -exec shred -uvz -n 3 {} \\;"
+        echo "  rm -rf ${work_dir}/result"
+        echo ""
+        echo "  # Or simple delete (less secure on HDDs):"
+        echo "  rm -rf ${work_dir}/result"
+        echo ""
+        echo "To securely delete input files, run:"
+        echo "  # With shred (more secure):"
+        echo "  find /path/to/input -type f -exec shred -uvz -n 3 {} \\;"
+        echo "  rm -rf /path/to/input"
+        echo ""
+        echo "  # Or simple delete:"
+        echo "  rm -rf /path/to/input"
     fi
 }
 
-cleanup_input() {
-    read -p "Delete input files? [y/N]: " confirm
-    if [[ $confirm == [yY] ]]; then
-        log_info "Securely deleting input data..."
-        if command -v shred &> /dev/null; then
-            find "${INPUT_DIR}" -type f -exec shred -uvz -n 3 {} \;
-        fi
-        rm -rf "${INPUT_DIR}"
-        log_info "Input data deleted"
+cmd_all_android() {
+    local input_dir="${1:?Input directory required}"
+    
+    log_info "Running complete Android export workflow..."
+    echo ""
+    
+    cmd_build || return 1
+    echo ""
+    
+    cmd_export_android "$input_dir" || return 1
+    
+    # Get the output directory that was created
+    local output_dir=$(ls -dt "${input_dir}_output_"* 2>/dev/null | head -1)
+    
+    if [ -n "$output_dir" ] && [ -d "$output_dir" ]; then
+        echo ""
+        cmd_encrypt "$output_dir" || return 1
     fi
+    
+    echo ""
+    log_info "✓ Complete workflow finished successfully!"
 }
 
-show_summary() {
-    echo ""
-    echo "=========================================="
-    echo "          Export Summary"
-    echo "=========================================="
-    echo "Work directory: ${WORK_DIR}"
+cmd_all_ios() {
+    local input_dir="${1:?Input directory required}"
     
-    if [ -f "${WORK_DIR}/whatsapp_export.tar.gz.gpg" ]; then
-        echo "Encrypted export: whatsapp_export.tar.gz.gpg"
-        echo "Size: $(du -h ${WORK_DIR}/whatsapp_export.tar.gz.gpg | cut -f1)"
-    elif [ -d "${OUTPUT_DIR}/result" ]; then
-        echo "Unencrypted export: output/result/"
-        echo "Size: $(du -sh ${OUTPUT_DIR}/result | cut -f1)"
+    log_info "Running complete iOS export workflow..."
+    echo ""
+    
+    cmd_build || return 1
+    echo ""
+    
+    cmd_export_ios "$input_dir" || return 1
+    
+    # Get the output directory that was created
+    local output_dir=$(ls -dt "${input_dir}_output_"* 2>/dev/null | head -1)
+    
+    if [ -n "$output_dir" ] && [ -d "$output_dir" ]; then
+        echo ""
+        cmd_encrypt "$output_dir" || return 1
     fi
     
     echo ""
-    echo "Security measures applied:"
-    echo "  ✓ Network isolated (Docker --network none)"
-    echo "  ✓ Read-only filesystem"
-    echo "  ✓ Dropped all capabilities"
-    echo "  ✓ Non-root user execution"
+    log_info "✓ Complete workflow finished successfully!"
+}
+
+cmd_help() {
+    cat << 'EOF'
+WhatsApp Chat Exporter - Secure Export Script
+==============================================
+
+USAGE:
+    ./secure_export.sh <command> [options]
+
+COMMANDS:
+    check_deps              Check if required dependencies are installed
+    build                   Build the Docker image
+    export_android <dir>    Export Android WhatsApp data from directory
+    export_ios <dir>        Export iOS WhatsApp data from directory
+    encrypt <dir>           Encrypt exported data in directory
+    all_android <dir>       Run all steps for Android (build + export + encrypt)
+    all_ios <dir>           Run all steps for iOS (build + export + encrypt)
+    help                    Show this help message
+
+EXAMPLES:
+    # Check dependencies
+    ./secure_export.sh check_deps
     
-    if [ -f "${WORK_DIR}/whatsapp_export.tar.gz.gpg" ]; then
-        echo "  ✓ AES-256 encryption"
-    fi
+    # Build Docker image once
+    ./secure_export.sh build
     
-    echo ""
-    echo "Next steps:"
-    echo "  1. Store the encrypted file in a secure location"
-    echo "  2. Back up to multiple secure locations"
-    echo "  3. Document the encryption password securely"
-    echo "  4. Delete the work directory when no longer needed:"
-    echo "     rm -rf ${WORK_DIR}"
-    echo "=========================================="
+    # Export Android data (points to existing directory with your data)
+    ./secure_export.sh export_android /path/to/whatsapp_data
+    
+    # Export iOS data (points to iOS backup directory)
+    ./secure_export.sh export_ios ~/Library/Application\ Support/MobileSync/Backup/[device-id]
+    
+    # Encrypt the output
+    ./secure_export.sh encrypt /path/to/whatsapp_data_output_20231228_120000
+    
+    # Run complete workflow for Android
+    ./secure_export.sh all_android /path/to/whatsapp_data
+    
+    # Run complete workflow for iOS
+    ./secure_export.sh all_ios ~/Library/Application\ Support/MobileSync/Backup/[device-id]
+
+DIRECTORY STRUCTURE:
+    For Android, your input directory should contain:
+        - msgstore.db (or msgstore.db.crypt14/15 with key file)
+        - wa.db (optional, for contact names)
+        - WhatsApp/ directory (for media files)
+    
+    For iOS, point to the iOS backup directory:
+        ~/Library/Application Support/MobileSync/Backup/[device-id]
+
+SECURITY MEASURES:
+    ✓ Network isolated (Docker --network none)
+    ✓ Read-only input filesystem
+    ✓ Dropped all capabilities
+    ✓ Non-root user execution
+    ✓ AES-256 encryption (with encrypt command)
+
+For more information, see SECURITY_USAGE_GUIDE.md
+EOF
 }
 
 # Main script
 main() {
-    echo "WhatsApp Chat Exporter - Secure Export Script"
-    echo "=============================================="
-    echo ""
+    local command="${1:-help}"
     
-    # Check platform
-    local platform=${1:-}
-    if [ "$platform" != "android" ] && [ "$platform" != "ios" ]; then
-        echo "Usage: $0 [android|ios]"
-        echo ""
-        echo "Examples:"
-        echo "  $0 android    # Export Android WhatsApp data"
-        echo "  $0 ios        # Export iOS WhatsApp data"
-        exit 1
-    fi
-    
-    log_info "Platform: $platform"
-    echo ""
-    
-    # Execute workflow
-    check_dependencies
-    setup_directories
-    copy_input_files "$platform"
-    build_docker_image
-    run_export "$platform"
-    encrypt_output
-    cleanup_input
-    show_summary
+    case "$command" in
+        check_deps)
+            cmd_check_deps
+            ;;
+        build)
+            cmd_build
+            ;;
+        export_android)
+            shift
+            cmd_export_android "$@"
+            ;;
+        export_ios)
+            shift
+            cmd_export_ios "$@"
+            ;;
+        encrypt)
+            shift
+            cmd_encrypt "$@"
+            ;;
+        all_android)
+            shift
+            cmd_all_android "$@"
+            ;;
+        all_ios)
+            shift
+            cmd_all_ios "$@"
+            ;;
+        help|--help|-h)
+            cmd_help
+            ;;
+        *)
+            echo "Unknown command: $command"
+            echo ""
+            cmd_help
+            exit 1
+            ;;
+    esac
 }
 
 # Run main function
