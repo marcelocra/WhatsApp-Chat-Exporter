@@ -1,0 +1,64 @@
+# Git files
+.git/
+.github/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# Test files
+*.db
+*.crypt*
+key
+wa.db
+msgstore.db
+
+# Output directories
+result/
+output/
+
+# Documentation (will be in image via git)
+*.md
+!README.md
+
+# Media and data files
+WhatsApp/
+Media/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.mp3
+*.pdf
+*.vcf
+
+# Sensitive files
+*.key
+*.pem
+*.p12
+encrypted_backup.key
