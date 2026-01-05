@@ -3,7 +3,7 @@
 **Review Date**: January 5, 2026  
 **Reviewer**: Security Audit  
 **Scope**: Complete Python codebase + HTML templates  
-**Focus**: Data exfiltration, external processes, HTML output safety  
+**Focus**: Data exfiltration, external processes, HTML output safety
 
 ---
 
@@ -14,6 +14,7 @@
 The WhatsApp Chat Exporter codebase has been thoroughly reviewed and is **safe for processing sensitive personal data**. All processing occurs locally with no data exfiltration. One minor privacy consideration was identified regarding CyberChef links (detailed below).
 
 ### Quick Facts
+
 - ✅ **No Data Exfiltration**: All processing is 100% local
 - ✅ **No External Processes**: No subprocess/shell command execution
 - ✅ **No Tracking**: No analytics, telemetry, or user tracking
@@ -31,10 +32,12 @@ The WhatsApp Chat Exporter codebase has been thoroughly reviewed and is **safe f
 **Only 2 network operations found in entire codebase:**
 
 **A. Optional Update Check** ([utility.py](Whatsapp_Chat_Exporter/utility.py#L142-L172))
+
 ```python
 PACKAGE_JSON = "https://pypi.org/pypi/whatsapp-chat-exporter/json"
 raw = urllib.request.urlopen(PACKAGE_JSON)
 ```
+
 - **Trigger**: Only with `--check-update` flag
 - **Purpose**: Check for newer versions on PyPI
 - **Data Sent**: None (HTTP GET request only)
@@ -42,10 +45,12 @@ raw = urllib.request.urlopen(PACKAGE_JSON)
 - **Risk**: None
 
 **B. W3.CSS Download** ([utility.py](Whatsapp_Chat_Exporter/utility.py#L487-L494))
+
 ```python
 w3css = "https://www.w3schools.com/w3css/4/w3.css"
 urllib.request.urlopen(w3css)
 ```
+
 - **Trigger**: Only when using `--offline static` flag (ironically)
 - **Purpose**: Cache W3.CSS stylesheet for offline use
 - **Data Sent**: None (HTTP GET request only)
@@ -54,6 +59,7 @@ urllib.request.urlopen(w3css)
 - **Mitigation**: Can be avoided by not using offline mode or pre-downloading the file
 
 **Verification**: Searched entire codebase for:
+
 - `import requests` - Not found
 - `import urllib` - Only 2 instances documented above
 - `import http.client` - Not found
@@ -71,6 +77,7 @@ urllib.request.urlopen(w3css)
 **No external processes executed in production code.**
 
 **Verification**: Searched entire `Whatsapp_Chat_Exporter/` directory for:
+
 - `subprocess.Popen` - Not found
 - `subprocess.run` - Not found
 - `subprocess.call` - Not found
@@ -79,11 +86,13 @@ urllib.request.urlopen(w3css)
 - `os.spawn*` - Not found
 
 **Note**: The `scripts/brazilian_number_processing_test.py` test file contains subprocess calls, but this is:
+
 1. NOT part of the main execution path
 2. Only in test/utility scripts
 3. Not imported by the main application
 
 **Files Reviewed**:
+
 - ✅ `__main__.py` - Main entry point
 - ✅ `android_handler.py` - Android message processing
 - ✅ `ios_handler.py` - iOS message processing
@@ -111,12 +120,14 @@ urllib.request.urlopen(w3css)
 - ✅ **No `__import__` manipulation** - Import hijacking risk: None
 
 **File Operations**: All safe and local
+
 - Reads from user-specified database files
 - Writes to user-specified output directories
 - No path traversal attempts detected
 - Uses proper path handling (`os.path.join`, `pathlib.Path`)
 
 **Mitigation with Docker**: The security documentation recommends Docker with:
+
 - Read-only input mounts (`-v input:/data:ro`)
 - Network isolation (`--network none`)
 - This completely mitigates any potential file system risks
@@ -128,11 +139,13 @@ urllib.request.urlopen(w3css)
 #### A. Template Security: SAFE ✅
 
 **Jinja2 Autoescape Enabled** ([utility.py](Whatsapp_Chat_Exporter/utility.py#L517)):
+
 ```python
 template_env = jinja2.Environment(loader=template_loader, autoescape=True)
 ```
 
 **Additional HTML Sanitization**:
+
 ```python
 from bleach import clean as sanitize
 
@@ -146,11 +159,13 @@ def sanitize_except(html: str) -> Markup:
 
 **Safe Filter Usage**:
 The `| safe` filter is only used for:
+
 1. **System metadata** (user joined/left group, etc.)
 2. **Binary data CyberChef links** (hardcoded URL pattern)
 3. **vCard file paths** (HTML-escaped with `htmle()`)
 
 User message content is properly escaped:
+
 ```jinja2
 {{ msg.data | sanitize_except() | urlize(none, true, '_blank') }}
 ```
@@ -165,6 +180,7 @@ All JavaScript in templates is **client-side only** with no network requests:
 4. **No XHR/Fetch** - Zero AJAX or network requests
 
 **Verified**: No instances of:
+
 - `fetch()`
 - `XMLHttpRequest`
 - `.ajax()`
@@ -174,33 +190,39 @@ All JavaScript in templates is **client-side only** with no network requests:
 #### C. External Resources: MINIMAL ⚠️
 
 **whatsapp.html** (Default Template):
+
 - W3.CSS: `https://www.w3schools.com/w3css/4/w3.css`
   - Static stylesheet only
   - Can be cached with `--offline static` flag
   - No JavaScript, no tracking
 
 **whatsapp_new.html** (Experimental Template):
+
 - ⚠️ Tailwind CSS CDN: `https://cdn.tailwindcss.com`
   - **Loads external JavaScript**
   - Used for styling only (not data collection)
   - **Recommendation**: Use default template for maximum security
 
 **Attribution Links** (Both templates):
+
 ```html
 <a href="https://web.dev/articles/lazy-loading-video">work</a>
 <a href="https://developers.google.com/readme/policies">shared by Google</a>
 <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 License</a>
 ```
+
 - Static footer links only
 - No tracking pixels or scripts
 - Standard attribution for code reuse
 
 **SVG xmlns Attributes**:
+
 - `xmlns="http://www.w3.org/2000/svg"` - XML namespace only, not a network request
 
 #### D. No Tracking/Analytics ✅
 
 **Verified absence of**:
+
 - Google Analytics
 - Google Tag Manager
 - Facebook Pixel
@@ -211,6 +233,7 @@ All JavaScript in templates is **client-side only** with no network requests:
 - Web beacons
 
 **No Forms or Data Submission**:
+
 - No `<form>` elements
 - No POST/GET submissions
 - No user input fields that submit to external servers
@@ -224,6 +247,7 @@ All JavaScript in templates is **client-side only** with no network requests:
 **Location**: [android_handler.py](Whatsapp_Chat_Exporter/android_handler.py#L360-L365)
 
 **Code**:
+
 ```python
 def _process_binary_message(message, content):
     """Process binary message data."""
@@ -238,11 +262,13 @@ def _process_binary_message(message, content):
 #### The Good ✅
 
 1. **No Server Transmission**: Data is in URL fragment (after `#`)
+
    - URL fragments are NOT sent to servers in HTTP requests
    - Only `https://gchq.github.io/CyberChef/` is transmitted
    - The `#recipe=...&input=...` part stays in the browser
 
-2. **CyberChef is Client-Side**: 
+2. **CyberChef is Client-Side**:
+
    - Open source tool by GCHQ (UK intelligence)
    - Processes data entirely in browser JavaScript
    - Code is auditable on GitHub
@@ -255,20 +281,24 @@ def _process_binary_message(message, content):
 #### The Bad ⚠️
 
 1. **Browser History Exposure**:
+
    - Full URL (including fragment with binary data) is saved in browser history
    - Could be accessed by other users of the same computer
    - Forensic tools can extract browser history
 
 2. **Browser Extension Risk**:
+
    - Malicious browser extensions can access full URLs including fragments
    - Could potentially exfiltrate data from history
 
 3. **Referer Header Leaks**:
+
    - If user clicks ANY external link FROM the CyberChef page
    - The Referer header could leak the full URL with data
    - Depends on CyberChef's referrer policy
 
 4. **Trust Dependency**:
+
    - Relies on GCHQ's CyberChef remaining trustworthy
    - Hosted on GitHub Pages (trusting GitHub infrastructure)
    - Future changes to the tool could introduce risks
@@ -281,6 +311,7 @@ def _process_binary_message(message, content):
 #### Affected Scenarios
 
 Binary messages are rare but can occur when:
+
 - WhatsApp database contains corrupted data
 - Special message types not properly decoded
 - Unknown or unsupported message formats
@@ -290,6 +321,7 @@ Binary messages are rare but can occur when:
 #### Recommendations
 
 **Option 1: Remove External Link (Most Secure)**
+
 ```python
 def _process_binary_message(message, content):
     """Process binary message data."""
@@ -302,6 +334,7 @@ def _process_binary_message(message, content):
 ```
 
 **Option 2: Add Warning Before Link**
+
 ```python
 def _process_binary_message(message, content):
     """Process binary message data."""
@@ -319,6 +352,7 @@ def _process_binary_message(message, content):
 ```
 
 **Option 3: Local JavaScript Decoder**
+
 ```python
 def _process_binary_message(message, content):
     """Process binary message data."""
@@ -338,7 +372,8 @@ def _process_binary_message(message, content):
 
 #### Findings: GOOD ✅
 
-**Phone Number Validation** ([__main__.py](Whatsapp_Chat_Exporter/__main__.py#L296-L301)):
+**Phone Number Validation** ([`__main__.py`](Whatsapp_Chat_Exporter/__main__.py#L296-L301)):
+
 ```python
 if chat_filter is not None:
     for chat in chat_filter:
@@ -347,19 +382,23 @@ if chat_filter is not None:
 ```
 
 **Date Validation**:
+
 ```python
 datetime.strptime(args.filter_date, args.filter_date_format)
 ```
+
 - Uses datetime parsing (safe)
 - Validates WhatsApp release date (2009)
 
 **Filename Sanitization** ([utility.py](Whatsapp_Chat_Exporter/utility.py#L265-L270)):
+
 ```python
 def sanitize_filename(file_name: str) -> str:
     return "".join(x for x in file_name if x.isalnum() or x in "- ")
 ```
 
 **SQL Injection Risk: LOW**
+
 - Some dynamic SQL with f-strings
 - BUT: Inputs are validated before use
 - Databases are user-owned local SQLite files
@@ -376,11 +415,13 @@ def sanitize_filename(file_name: str) -> str:
 **Purpose**: Decrypt WhatsApp backup files (crypt12/14/15 formats)
 
 **Methods Used**:
+
 - AES-GCM (industry standard)
 - HMAC-SHA256 (secure)
 - Proper key derivation
 
 **Security**:
+
 - ✅ No custom crypto (uses PyCrypto/PyCryptodome)
 - ✅ Standard algorithms
 - ✅ Decryption only (not creating new encrypted data)
@@ -388,12 +429,14 @@ def sanitize_filename(file_name: str) -> str:
 - ✅ No keys sent anywhere
 
 **Code Review**:
+
 ```python
 def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
     intermediate_hmac = hmac.new(b'\x00' * 32, key_stream, sha256).digest()
     key = hmac.new(intermediate_hmac, b"backup encryption\x01", sha256).digest()
     return key, key_stream
 ```
+
 - Follows WhatsApp's documented decryption method
 - No backdoors or key logging
 - No network transmission of keys
@@ -406,12 +449,14 @@ def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
 
 **Severity**: Medium (Privacy concern, not security breach)
 
-**Action**: 
+**Action**:
+
 - Remove or add warning to CyberChef link
 - Consider local base64 decoder in JavaScript
 - Document privacy implications for users
 
 **Rationale**:
+
 - Browser history exposure
 - User confusion about data handling
 - Dependency on external tool
@@ -421,11 +466,13 @@ def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
 **Severity**: Low
 
 **Action**:
+
 - Add prominent note in README about experimental template CDN dependency
 - Recommend using default template for sensitive data
 - Consider vendoring Tailwind CSS
 
 **Rationale**:
+
 - External JavaScript dependency
 - Trust in CDN infrastructure required
 - Easily avoidable by using default template
@@ -435,11 +482,13 @@ def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
 **Severity**: Low
 
 **Action**:
+
 - Emphasize Docker usage more prominently in README
 - Add "Quick Security Start" section at top of README
 - Include one-liner Docker commands
 
 **Current State**: Already excellent Docker documentation exists in:
+
 - `SECURITY_USAGE_GUIDE.md`
 - `DOCKER.md`
 - `secure_export.sh`
@@ -451,11 +500,13 @@ def _derive_main_enc_key(key_stream: bytes) -> Tuple[bytes, bytes]:
 **Severity**: Low
 
 **Action**:
+
 - Add SHA256 checksums for external resources (W3.CSS, etc.)
 - Verify checksums before use
 - Warn user if checksum doesn't match
 
 **Example**:
+
 ```python
 EXPECTED_W3CSS_SHA256 = "abc123..."
 actual_hash = hashlib.sha256(downloaded_content).hexdigest()
@@ -469,11 +520,13 @@ if actual_hash != EXPECTED_W3CSS_SHA256:
 
 **Action**:
 Add flag to remove all external links from output:
+
 ```bash
 whatsapp-chat-exporter --android --no-external-links
 ```
 
 **Behavior**:
+
 - Skip CyberChef link generation
 - Display base64 data inline only
 - Remove attribution links (or make them plain text)
@@ -484,18 +537,21 @@ whatsapp-chat-exporter --android --no-external-links
 ## Testing & Verification Methodology
 
 ### Tools Used
+
 1. **grep_search**: Pattern matching across entire codebase
-2. **file_search**: File discovery and enumeration  
+2. **file_search**: File discovery and enumeration
 3. **read_file**: Line-by-line code review
 4. **Semantic analysis**: Understanding data flow and execution paths
 
 ### Files Analyzed
+
 - **15 Python files** in `Whatsapp_Chat_Exporter/`
 - **3 Python scripts** in `scripts/`
 - **2 HTML templates**
 - **4 Security documentation files**
 
 ### Patterns Searched
+
 ```regex
 Network: requests|urllib|http\.client|socket|telnetlib|ftplib|smtplib
 Processes: subprocess|os\.system|os\.popen|commands\.
@@ -505,6 +561,7 @@ XSS: <script|fetch\(|XMLHttpRequest|ajax
 ```
 
 ### Total Lines Reviewed
+
 - **3,500+ lines** of Python code
 - **800+ lines** of HTML templates
 - **70KB** of security documentation
@@ -514,7 +571,9 @@ XSS: <script|fetch\(|XMLHttpRequest|ajax
 ## Comparison with Previous Review
 
 ### Previous Review (December 28, 2025)
+
 The earlier security review (documented in `SECURITY_REVIEW_SUMMARY.md`) concluded:
+
 - ✅ Safe for personal use
 - ✅ No data exfiltration
 - ✅ Proper cryptography
@@ -522,7 +581,9 @@ The earlier security review (documented in `SECURITY_REVIEW_SUMMARY.md`) conclud
 - ✅ Input validation
 
 ### This Review (January 5, 2026)
+
 **Additional Analysis**:
+
 - ✅ Confirmed no external processes
 - ✅ Verified HTML output safety
 - ✅ Examined all JavaScript code
@@ -531,6 +592,7 @@ The earlier security review (documented in `SECURITY_REVIEW_SUMMARY.md`) conclud
 - ✅ Verified no tracking/analytics
 
 ### Conclusion
+
 This review **confirms and extends** the previous review. The code remains safe with one additional privacy consideration identified (CyberChef link).
 
 ---
@@ -539,15 +601,15 @@ This review **confirms and extends** the previous review. The code remains safe 
 
 ### Overall Risk Level: **LOW** ✅
 
-| Category | Risk | Details |
-|----------|------|---------|
-| Data Exfiltration | **None** | No network transmission of user data |
-| External Processes | **None** | No subprocess/shell execution |
-| Code Execution | **None** | No eval/exec/compile |
-| SQL Injection | **Very Low** | Input validated, read-only mounts available |
-| XSS | **Very Low** | Jinja2 autoescape + bleach sanitization |
-| Browser History | **Low** | CyberChef link stores data in URL fragment |
-| External Dependencies | **Low** | Minimal (optional W3.CSS, optional Tailwind) |
+| Category              | Risk         | Details                                      |
+| --------------------- | ------------ | -------------------------------------------- |
+| Data Exfiltration     | **None**     | No network transmission of user data         |
+| External Processes    | **None**     | No subprocess/shell execution                |
+| Code Execution        | **None**     | No eval/exec/compile                         |
+| SQL Injection         | **Very Low** | Input validated, read-only mounts available  |
+| XSS                   | **Very Low** | Jinja2 autoescape + bleach sanitization      |
+| Browser History       | **Low**      | CyberChef link stores data in URL fragment   |
+| External Dependencies | **Low**      | Minimal (optional W3.CSS, optional Tailwind) |
 
 ### Security Strengths
 
@@ -573,25 +635,29 @@ This review **confirms and extends** the previous review. The code remains safe 
 ### For Maximum Security
 
 1. **Use Docker** with network isolation:
+
    ```bash
    ./secure_export.sh all_android /path/to/data
    ```
 
 2. **Use Default Template** (avoid `--experimental`):
+
    ```bash
    # Good (no external JavaScript)
    whatsapp-chat-exporter --android -d msgstore.db
-   
+
    # Avoid for sensitive data (loads Tailwind CDN)
    whatsapp-chat-exporter --android --experimental -d msgstore.db
    ```
 
 3. **Enable Offline Mode**:
+
    ```bash
    whatsapp-chat-exporter --android --offline static -d msgstore.db
    ```
 
-4. **Review Output**: 
+4. **Review Output**:
+
    - Check generated HTML files before sharing
    - Be aware that binary messages link to external tool
    - Clear browser history after viewing if concerned
@@ -604,12 +670,14 @@ This review **confirms and extends** the previous review. The code remains safe 
 
 ### For Developers/Auditors
 
-1. **Review Dependencies**: 
+1. **Review Dependencies**:
+
    ```bash
    pip list | grep -E 'requests|urllib3|http'
    ```
 
 2. **Monitor Network Traffic**:
+
    ```bash
    # Run with network monitoring
    tcpdump -i any -n 'host not 127.0.0.1' &
@@ -617,6 +685,7 @@ This review **confirms and extends** the previous review. The code remains safe 
    ```
 
 3. **Verify Checksums**:
+
    ```bash
    sha256sum result/*.html
    ```
@@ -634,6 +703,7 @@ This review **confirms and extends** the previous review. The code remains safe 
 The WhatsApp Chat Exporter is **safe for processing sensitive personal data** when following basic security practices.
 
 **Summary**:
+
 - ✅ **No malicious code** or backdoors found
 - ✅ **No data exfiltration** mechanisms
 - ✅ **Local processing only** - all data stays on user's machine
@@ -651,6 +721,7 @@ This is a **legitimate, well-designed tool** for local WhatsApp data export. It 
 ### Recommended Use Case
 
 ✅ Safe for:
+
 - Personal WhatsApp archive creation
 - Legal compliance (data portability)
 - Backup purposes
@@ -660,6 +731,7 @@ This is a **legitimate, well-designed tool** for local WhatsApp data export. It 
 ### When to Exercise Caution
 
 ⚠️ Be aware:
+
 - Binary messages create CyberChef links (browser history)
 - Experimental template loads external JavaScript (Tailwind CDN)
 - Generated HTML files contain your personal chat data (protect them!)
@@ -669,11 +741,13 @@ This is a **legitimate, well-designed tool** for local WhatsApp data export. It 
 ## Appendix: External URLs Found
 
 ### In Python Code
+
 1. `https://pypi.org/pypi/whatsapp-chat-exporter/json` - Update check (optional)
 2. `https://www.w3schools.com/w3css/4/w3.css` - CSS download (offline mode)
 3. `https://gchq.github.io/CyberChef/...` - Binary data decoder (privacy concern)
 
 ### In HTML Templates
+
 1. `https://cdn.tailwindcss.com` - Tailwind CSS (experimental template only)
 2. `https://web.dev/articles/lazy-loading-video` - Attribution link
 3. `https://developers.google.com/readme/policies` - Attribution link
@@ -681,6 +755,7 @@ This is a **legitimate, well-designed tool** for local WhatsApp data export. It 
 5. `http://www.w3.org/2000/svg` - SVG namespace (not a network request)
 
 ### Risk Assessment
+
 - **High Risk**: None
 - **Medium Risk**: CyberChef link (privacy concern)
 - **Low Risk**: Tailwind CDN (experimental template)
@@ -692,7 +767,7 @@ This is a **legitimate, well-designed tool** for local WhatsApp data export. It 
 
 - **2026-01-05**: Initial comprehensive security review
   - Analyzed all Python code for network access
-  - Reviewed HTML templates for tracking/scripts  
+  - Reviewed HTML templates for tracking/scripts
   - Examined external process execution
   - Identified CyberChef link privacy concern
   - Documented recommendations
