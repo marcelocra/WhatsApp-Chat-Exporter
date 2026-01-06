@@ -42,15 +42,22 @@ class BackupExtractor:
         Returns:
             bool: True if encrypted, False otherwise.
         """
-        with sqlite3.connect(os.path.join(self.base_dir, "Manifest.db")) as db:
-            c = db.cursor()
-            try:
-                c.execute("SELECT count() FROM Files")
-                c.fetchone()  # Execute and fetch to trigger potential errors
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return True
-            else:
-                return False
+        db_path = os.path.join(self.base_dir, "Manifest.db")
+        try:
+            # Attempts to open with immutability flag to avoid error on :ro volumes
+            # uri=True is essential here
+            with sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True) as db:
+                c = db.cursor()
+                try:
+                    c.execute("SELECT count() FROM Files")
+                    c.fetchone()
+                except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                    return True
+                else:
+                    return False
+        except Exception:
+            # Safe fallback: if opening fails, assume encrypted
+            return True
 
     def _extract_encrypted_backup(self):
         """
@@ -171,7 +178,9 @@ class BackupExtractor:
         Extracts media files from the unencrypted backup.
         """
         _wts_id = self.identifiers.DOMAIN
-        with sqlite3.connect(os.path.join(self.base_dir, "Manifest.db")) as manifest:
+        db_path = os.path.join(self.base_dir, "Manifest.db")
+        # We use the same trick here to read the manifest without attempting to create locks
+        with sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True) as manifest:
             manifest.row_factory = sqlite3.Row
             c = manifest.cursor()
             c.execute(f"SELECT count() FROM Files WHERE domain = '{_wts_id}'")
@@ -207,11 +216,15 @@ class BackupExtractor:
                         pass
                 elif flags == 1:  # File
                     shutil.copyfile(os.path.join(self.base_dir, folder, hashes), destination)
-                    metadata = BPListReader(row["metadata"]).parse()
-                    creation = metadata["$objects"][1]["Birth"]
-                    modification = metadata["$objects"][1]["LastModified"]
-                    os.utime(destination, (modification, modification))
-
+                    try:
+                        metadata = BPListReader(row["metadata"]).parse()
+                        creation = metadata["$objects"][1]["Birth"]
+                        modification = metadata["$objects"][1]["LastModified"]
+                        os.utime(destination, (modification, modification))
+                    except OSError:
+                        # In restricted environments (Docker/WSL), changing timestamp may fail.
+                        # We silently ignore this as it does not affect the content.
+                        pass
                 if row["_index"] % 100 == 0:
                     print(f"Extracting WhatsApp files...({row['_index']}/{total_row_number})", end="\r")
                 row = c.fetchone()
