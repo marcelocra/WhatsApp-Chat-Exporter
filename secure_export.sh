@@ -1,13 +1,13 @@
 #!/bin/bash
 #
 # Secure WhatsApp Chat Export Script
-# This script automates the secure export process using Docker
+# This script automates the secure export process using Podman
 #
 # Usage: ./secure_export.sh [command] [options]
 #
 # Commands:
 #   check_deps              Check if required dependencies are installed
-#   build                   Build the Docker image
+#   build                   Build the Podman image
 #   export_android <dir>    Export Android WhatsApp data from directory
 #   export_ios <dir>        Export iOS WhatsApp data from directory
 #   encrypt <dir>           Encrypt exported data in directory
@@ -26,16 +26,6 @@ NC='\033[0m' # No Color
 
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Common Docker flags for security hardening
-DOCKER_SECURITY_FLAGS=(
-    --network none
-    --read-only
-    --tmpfs /tmp
-    --security-opt=no-new-privileges:true
-    --cap-drop=ALL
-)
-
 # Functions
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -54,11 +44,11 @@ cmd_check_deps() {
     
     local all_ok=true
     
-    if ! command -v docker &> /dev/null; then
-        log_error "Docker is not installed. Please install Docker first."
+    if ! command -v podman &> /dev/null; then
+        log_error "Podman is not installed. Please install Podman first."
         all_ok=false
     else
-        log_info "✓ Docker is installed"
+        log_info "✓ Podman is installed"
     fi
     
     if ! command -v gpg &> /dev/null; then
@@ -76,15 +66,15 @@ cmd_check_deps() {
 }
 
 cmd_build() {
-    log_info "Building Docker image..."
+    log_info "Building Podman container image..."
     
     cd "${SCRIPT_DIR}"
-    docker build -t whatsapp-exporter:secure . || {
-        log_error "Failed to build Docker image"
+    podman build -t whatsapp-exporter:secure . || {
+        log_error "Failed to build container image"
         return 1
     }
     
-    log_info "✓ Docker image built successfully: whatsapp-exporter:secure"
+    log_info "✓ Container image built successfully: whatsapp-exporter:secure"
 }
 
 cmd_export_android() {
@@ -103,12 +93,16 @@ cmd_export_android() {
     log_info "Output directory: ${output_dir}"
     log_info "Network access is DISABLED for security"
     
-    # Run the export with common security flags
-    docker run --rm \
-        "${DOCKER_SECURITY_FLAGS[@]}" \
-        -v "${input_dir}:/data/input:ro" \
-        -v "${output_dir}:/data/output" \
-        -u "$(id -u):$(id -g)" \
+    # Run the export with security flags
+    podman run --rm \
+        --network none \
+        --read-only \
+        --tmpfs /tmp \
+        --security-opt=no-new-privileges:true \
+        --cap-drop=ALL \
+        -v "${input_dir}:/data/input:ro,z" \
+        -v "${output_dir}:/data/output:z" \
+        -w /data/output \
         whatsapp-exporter:secure \
         wtsexporter -a \
             -d /data/input/msgstore.db \
@@ -139,12 +133,16 @@ cmd_export_ios() {
     log_info "Output directory: ${output_dir}"
     log_info "Network access is DISABLED for security"
     
-    # Run the export with common security flags
-    docker run --rm \
-        "${DOCKER_SECURITY_FLAGS[@]}" \
-        -v "${input_dir}:/data/input:ro" \
-        -v "${output_dir}:/data/output" \
-        -u "$(id -u):$(id -g)" \
+    # Run the export with security flags
+    podman run --rm \
+        --network none \
+        --read-only \
+        --tmpfs /tmp \
+        --security-opt=no-new-privileges:true \
+        --cap-drop=ALL \
+        -v "${input_dir}:/data/input:ro,z" \
+        -v "${output_dir}:/data/output:z" \
+        -w /data/output \
         whatsapp-exporter:secure \
         wtsexporter -i \
             -b /data/input \
@@ -256,7 +254,7 @@ USAGE:
 
 COMMANDS:
     check_deps              Check if required dependencies are installed
-    build                   Build the Docker image
+    build                   Build the Podman container image
     export_android <dir>    Export Android WhatsApp data from directory
     export_ios <dir>        Export iOS WhatsApp data from directory
     encrypt <dir>           Encrypt exported data in directory
@@ -268,7 +266,7 @@ EXAMPLES:
     # Check dependencies
     ./secure_export.sh check_deps
     
-    # Build Docker image once
+    # Build Podman container image once
     ./secure_export.sh build
     
     # Export Android data (points to existing directory with your data)
@@ -296,11 +294,12 @@ DIRECTORY STRUCTURE:
         ~/Library/Application Support/MobileSync/Backup/[device-id]
 
 SECURITY MEASURES:
-    ✓ Network isolated (Docker --network none)
+    ✓ Network isolated (--network none)
     ✓ Read-only input filesystem
     ✓ Dropped all capabilities
     ✓ Non-root user execution
     ✓ AES-256 encryption (with encrypt command)
+    ✓ SELinux support (:z volume flag)
 
 For more information, see SECURITY_USAGE_GUIDE.md
 EOF
